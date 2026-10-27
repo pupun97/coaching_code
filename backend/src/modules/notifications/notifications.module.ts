@@ -8,7 +8,7 @@ import { RealtimeEventsService } from './realtime-events.service';
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'edunexus-super-secret-jwt-key-2026',
+      secret: process.env.JWT_ACCESS_SECRET || 'edunexus-dev-access-secret-key-2026-secure-token-32chars',
     }),
   ],
   controllers: [NotificationsController],

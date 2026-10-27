@@ -29,7 +29,7 @@ export class NotificationsController {
     let userId: string;
     try {
       const decoded = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || 'edunexus-super-secret-jwt-key-2026',
+        secret: process.env.JWT_ACCESS_SECRET || 'edunexus-dev-access-secret-key-2026-secure-token-32chars',
       });
       userId = decoded.sub || decoded.id;
     } catch {
