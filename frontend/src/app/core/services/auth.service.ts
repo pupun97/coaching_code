@@ -11,7 +11,9 @@ export class AuthService {
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? 'http://localhost:3000/api/auth'
-      : 'http://3.110.11.46:3000/api/auth';
+      : window.location.protocol === 'https:'
+        ? '/api/auth'
+        : 'http://3.110.11.46/api/auth';
   private readonly TOKEN_KEY = 'edunexus_access_token';
   private readonly REFRESH_KEY = 'edunexus_refresh_token';
   private readonly USER_KEY = 'edunexus_user';
