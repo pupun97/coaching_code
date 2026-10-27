@@ -9,9 +9,7 @@ export class ApiService {
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? 'http://localhost:3000/api'
-      : window.location.protocol === 'https:'
-        ? '/api'
-        : 'http://3.110.11.46/api';
+      : 'https://3.110.11.46.sslip.io/api';
 
   constructor(
     private readonly http: HttpClient,
