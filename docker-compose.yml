@@ -1,0 +1,60 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: edunexus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-edunexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edunexus_secret_password}
+      POSTGRES_DB: ${POSTGRES_DB:-edunexus_db}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-edunexus} -d ${POSTGRES_DB:-edunexus_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: edunexus-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-edunexus}:${POSTGRES_PASSWORD:-edunexus_secret_password}@postgres:5432/${POSTGRES_DB:-edunexus_db}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_in_production_access_secret_min_32_chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_in_production_refresh_secret_min_32_chars}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      STORAGE_DRIVER: local
+      UPLOAD_DIR: ./uploads
+      CORS_ORIGIN: http://localhost:4200
+    ports:
+      - '3000:3000'
+    volumes:
+      - backend_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: edunexus-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '4200:80'
+
+volumes:
+  postgres_data:
+  backend_uploads:
