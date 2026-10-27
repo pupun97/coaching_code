@@ -70,6 +70,11 @@ import { ToastService } from './core/services/toast.service';
       display: flex; align-items: center; justify-content: center; z-index: 9998; padding: 16px;
     }
     .confirm-dialog { width: 100%; max-width: 440px; }
+    @media (max-width: 640px) {
+      .toast-stack {
+        bottom: 12px; left: 12px; right: 12px; max-width: none; width: auto;
+      }
+    }
   `],
 })
 export class AppComponent {

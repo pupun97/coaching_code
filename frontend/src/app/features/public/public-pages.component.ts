@@ -201,8 +201,15 @@ import { ToastService } from '../../core/services/toast.service';
       display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.2rem;
     }
     @media (max-width: 900px) {
-      .hero-inner { grid-template-columns: 1fr; }
-      .hero-metrics { grid-template-columns: repeat(2, 1fr); }
+      .hero-section { padding: 42px 16px; }
+      .hero-inner { grid-template-columns: 1fr; gap: 28px; }
+      h1 { font-size: 1.95rem; }
+      .hero-sub { font-size: 0.94rem; margin-bottom: 20px; }
+      .hero-ctas { flex-direction: column; .btn { width: 100%; justify-content: center; } }
+      .hero-metrics { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+      .showcase-card { padding: 20px; }
+      .section { padding: 40px 0; }
+      .container { padding: 0 16px; }
     }
   `],
 })

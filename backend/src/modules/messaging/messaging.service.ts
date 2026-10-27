@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RealtimeEventsService } from '../notifications/realtime-events.service';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class MessagingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly realtime: RealtimeEventsService,
   ) {}
 
   async getMyConversations(actor: AuthenticatedUser, search?: string) {
@@ -236,9 +238,16 @@ export class MessagingService {
     const participants = await this.prisma.conversationParticipant.findMany({
       where: { conversationId, userId: { not: actor.id } },
     });
+    const recipientIds = participants.map((p) => p.userId);
+
+    // Emit instant real-time NEW_MESSAGE event to recipients and sender
+    this.realtime.emitToUsers([...recipientIds, actor.id], 'NEW_MESSAGE', {
+      conversationId,
+      message,
+    });
 
     await this.notifications.createBulkNotifications(
-      participants.map((p) => p.userId),
+      recipientIds,
       {
         type: 'MESSAGE',
         title: `New Message from ${actor.firstName} ${actor.lastName}`,
@@ -248,6 +257,20 @@ export class MessagingService {
     );
 
     return message;
+  }
+
+  async emitTyping(conversationId: string, isTyping: boolean, actor: AuthenticatedUser) {
+    const participants = await this.prisma.conversationParticipant.findMany({
+      where: { conversationId, userId: { not: actor.id } },
+    });
+    const recipientIds = participants.map((p) => p.userId);
+    this.realtime.emitToUsers(recipientIds, 'TYPING', {
+      conversationId,
+      userId: actor.id,
+      userName: `${actor.firstName} ${actor.lastName}`,
+      isTyping,
+    });
+    return { ok: true };
   }
 
   async getAvailableContacts(actor: AuthenticatedUser) {

@@ -31,6 +31,14 @@ import { AuthService } from '../core/services/auth.service';
             <a routerLink="/faculty" routerLinkActive="active" (click)="mobileMenuOpen.set(false)">Faculty</a>
             <a routerLink="/faq" routerLinkActive="active" (click)="mobileMenuOpen.set(false)">FAQ</a>
             <a routerLink="/contact" routerLinkActive="active" (click)="mobileMenuOpen.set(false)">Contact</a>
+            <div class="mobile-nav-ctas">
+              @if (auth.isAuthenticated()) {
+                <a [routerLink]="auth.getDefaultDashboardRoute()" class="btn btn-primary" (click)="mobileMenuOpen.set(false)">Go to Dashboard</a>
+              } @else {
+                <a routerLink="/contact" class="btn btn-secondary" (click)="mobileMenuOpen.set(false)">Enquire Now</a>
+                <a routerLink="/login" class="btn btn-primary" (click)="mobileMenuOpen.set(false)">Portal Login</a>
+              }
+            </div>
           </nav>
 
           <div class="nav-actions">
@@ -137,15 +145,26 @@ import { AuthService } from '../core/services/auth.service';
       max-width: 1280px; margin: 40px auto 0; padding-top: 20px;
       border-top: 1px solid #1e293b; text-align: center; font-size: 0.82rem; color: #64748b;
     }
+    .mobile-nav-ctas { display: none; }
     @media (max-width: 900px) {
-      .mobile-toggle { display: block; }
+      .nav-inner { padding: 12px 16px; }
+      .brand-name { font-size: 0.96rem; }
+      .brand-tag { font-size: 0.66rem; }
+      .mobile-toggle { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 8px; border: 1px solid #e2e8f0; }
+      .nav-actions { display: none; }
       .nav-links {
-        display: none; position: absolute; top: 68px; left: 0; right: 0;
-        background: #fff; flex-direction: column; padding: 16px 24px;
-        border-bottom: 1px solid #e2e8f0; box-shadow: 0 10px 15px rgba(0,0,0,0.05);
+        display: none; position: absolute; top: 65px; left: 0; right: 0;
+        background: #fff; flex-direction: column; align-items: stretch; gap: 6px; padding: 16px 20px 20px;
+        border-bottom: 1px solid #e2e8f0; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
+        a { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
         &.open { display: flex; }
       }
-      .footer-inner { grid-template-columns: 1fr; }
+      .mobile-nav-ctas {
+        display: flex; flex-direction: column; gap: 10px; margin-top: 10px;
+        .btn { width: 100%; justify-content: center; border-bottom: none; padding: 11px 16px; }
+      }
+      .footer-inner { grid-template-columns: 1fr; gap: 28px; }
+      .public-footer { padding: 40px 16px 20px; margin-top: 40px; }
     }
   `],
 })

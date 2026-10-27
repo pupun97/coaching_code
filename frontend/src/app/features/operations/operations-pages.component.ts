@@ -1,9 +1,11 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { RealtimeService } from '../../core/services/realtime.service';
 
 // ============================================================================
 // 1. QUESTION BANK & HIERARCHY / BULK CSV IMPORT COMPONENT
@@ -1278,17 +1280,21 @@ export class AssignmentsPageComponent implements OnInit {
     <div class="page-container">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Internal Messaging & Academic Doubt Chat</h1>
-          <p class="page-subtitle">Role-authorized communication between Teachers, Students, Parents, and Administration</p>
+          <h1 class="page-title">Real-Time Chat & Academic Doubt Forum</h1>
+          <p class="page-subtitle">Instant live messaging between Teachers, Students, Parents, and Administration</p>
+        </div>
+        <div class="live-pill" [class.connected]="realtime.isConnected()">
+          <span class="dot"></span>
+          {{ realtime.isConnected() ? 'Live Real-Time Connected' : 'Connecting...' }}
         </div>
       </div>
 
-      <div class="chat-layout">
+      <div class="chat-layout" [class.mobile-chat-open]="mobileShowChat()">
         <!-- Conversations Sidebar -->
         <div class="card conv-list">
           <div style="margin-bottom:12px">
-            <label style="font-size:0.78rem;font-weight:700;color:#64748b;display:block;margin-bottom:6px">START NEW CONVERSATION</label>
-            <select [(ngModel)]="newRecipientId" (ngModelChange)="startNewChat($event)" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+            <label style="font-size:0.76rem;font-weight:700;color:#64748b;display:block;margin-bottom:6px">START NEW CONVERSATION</label>
+            <select [(ngModel)]="newRecipientId" (ngModelChange)="startNewChat($event)" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.88rem">
               <option value="">+ Select Authorized Contact...</option>
               @for (c of contacts(); track c.id) {
                 <option [value]="c.id">{{ c.firstName }} {{ c.lastName }} ({{ c.role }})</option>
@@ -1296,41 +1302,62 @@ export class AssignmentsPageComponent implements OnInit {
             </select>
           </div>
 
-          @for (conv of conversations(); track conv.id) {
-            <div
-              class="conv-item"
-              [class.active]="activeConv()?.id === conv.id"
-              (click)="openConversation(conv.id)"
-            >
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <strong style="font-size:0.88rem">
-                  {{ conv.otherParticipants?.[0]?.firstName }} {{ conv.otherParticipants?.[0]?.lastName }}
-                </strong>
-                @if (conv.unreadCount > 0) {
-                  <span class="badge badge-primary">{{ conv.unreadCount }}</span>
-                }
+          <div class="conv-scroll">
+            @for (conv of conversations(); track conv.id) {
+              <div
+                class="conv-item"
+                [class.active]="activeConv()?.id === conv.id"
+                (click)="openConversation(conv.id)"
+              >
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                  <strong style="font-size:0.9rem;color:#0f172a">
+                    {{ conv.otherParticipants?.[0]?.firstName }} {{ conv.otherParticipants?.[0]?.lastName }}
+                  </strong>
+                  @if (conv.unreadCount > 0) {
+                    <span class="badge badge-primary">{{ conv.unreadCount }}</span>
+                  }
+                </div>
+                <div style="font-size:0.75rem;color:#4f46e5;font-weight:600;margin-top:2px">
+                  {{ conv.otherParticipants?.[0]?.role }} • {{ conv.subject }}
+                </div>
+                <div style="font-size:0.8rem;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                  {{ conv.lastMessage?.content || 'No messages yet' }}
+                </div>
               </div>
-              <div style="font-size:0.78rem;color:#4f46e5;font-weight:600">{{ conv.subject }}</div>
-              <div style="font-size:0.78rem;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                {{ conv.lastMessage?.content }}
+            } @empty {
+              <div style="padding:24px 12px;text-align:center;color:#64748b;font-size:0.85rem">
+                No conversations yet. Choose a contact above to start chatting in real time!
               </div>
-            </div>
-          }
+            }
+          </div>
         </div>
 
         <!-- Chat Window -->
         <div class="card chat-window">
           @if (activeConv()) {
             <div class="chat-header">
-              <strong>{{ activeConv().subject }}</strong>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" class="btn btn-secondary btn-sm mobile-back-btn" (click)="mobileShowChat.set(false)">
+                  ← Chats
+                </button>
+                <div>
+                  <strong style="font-size:0.98rem;display:block">
+                    {{ getOtherParticipantName(activeConv()) }}
+                  </strong>
+                  <span style="font-size:0.75rem;color:#64748b">{{ activeConv().subject }}</span>
+                </div>
+              </div>
+              @if (typingUser()) {
+                <span class="typing-indicator">✍️ {{ typingUser() }} is typing...</span>
+              }
             </div>
 
-            <div class="chat-messages">
+            <div class="chat-messages" id="chatMessagesContainer">
               @for (m of activeConv().messages; track m.id) {
                 <div class="msg-bubble" [class.mine]="m.senderId === auth.currentUser()?.id">
-                  <div class="msg-sender">{{ m.sender.firstName }} {{ m.sender.lastName }} ({{ m.sender.role }})</div>
+                  <div class="msg-sender">{{ m.sender?.firstName }} {{ m.sender?.lastName }} ({{ m.sender?.role }})</div>
                   <div class="msg-text">{{ m.content }}</div>
-                  <div class="msg-time">{{ m.createdAt | date:'short' }}</div>
+                  <div class="msg-time">{{ m.createdAt | date:'shortTime' }}</div>
                 </div>
               }
             </div>
@@ -1339,17 +1366,22 @@ export class AssignmentsPageComponent implements OnInit {
               <input
                 type="text"
                 [(ngModel)]="replyText"
+                (ngModelChange)="onTypingInput()"
                 name="replyText"
-                placeholder="Type your message..."
+                placeholder="Type a message and press Enter..."
+                autocomplete="off"
                 required
               />
-              <button type="submit" class="btn btn-primary">Send</button>
+              <button type="submit" class="btn btn-primary" [disabled]="sending()">
+                <span class="material-icons-outlined" style="font-size:18px">send</span>
+                <span class="send-label">Send</span>
+              </button>
             </form>
           } @else {
-            <div class="empty-state">
+            <div class="empty-state" style="margin:auto">
               <span class="material-icons-outlined">forum</span>
               <h4>Select a conversation or start a new chat</h4>
-              <p>All messages are role-scoped and private to conversation participants.</p>
+              <p>Messages are delivered instantly in real time with sound & push alerts.</p>
             </div>
           }
         </div>
@@ -1357,58 +1389,144 @@ export class AssignmentsPageComponent implements OnInit {
     </div>
   `,
   styles: [`
-    .chat-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; min-height: 520px; }
-    .conv-list { overflow-y: auto; max-height: 600px; }
+    .live-pill {
+      display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px;
+      border-radius: 999px; font-size: 0.78rem; font-weight: 700;
+      background: #fef3c7; color: #92400e;
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+      &.connected { background: #ecfdf5; color: #047857; .dot { background: #10b981; box-shadow: 0 0 8px #10b981; } }
+    }
+    .chat-layout { display: grid; grid-template-columns: 330px 1fr; gap: 20px; height: calc(100vh - 200px); min-height: 480px; }
+    .conv-list { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
+    .conv-scroll { flex: 1; overflow-y: auto; padding-right: 4px; }
     .conv-item {
-      padding: 12px; border-radius: 10px; border: 1px solid #f1f5f9; margin-bottom: 8px; cursor: pointer;
+      padding: 12px; border-radius: 10px; border: 1px solid #f1f5f9; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
       &:hover { background: #f8fafc; }
       &.active { background: #eef2ff; border-color: #c7d2fe; }
     }
-    .chat-window { display: flex; flex-direction: column; justify-content: space-between; max-height: 600px; }
-    .chat-header { padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
-    .chat-messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 12px; }
+    .chat-window { display: flex; flex-direction: column; justify-content: space-between; height: 100%; overflow: hidden; }
+    .chat-header {
+      padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .mobile-back-btn { display: none; }
+    .typing-indicator { font-size: 0.78rem; color: #4f46e5; font-weight: 600; animation: pulse 1.2s infinite; }
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 16px 4px; display: flex; flex-direction: column; gap: 10px;
+    }
     .msg-bubble {
-      max-width: 75%; padding: 10px 14px; border-radius: 12px; background: #f1f5f9; align-self: flex-start;
-      &.mine { background: #4f46e5; color: #fff; align-self: flex-end; .msg-sender, .msg-time { color: #c7d2fe; } }
-      .msg-sender { font-size: 0.72rem; font-weight: 700; color: #475569; margin-bottom: 3px; }
-      .msg-text { font-size: 0.9rem; line-height: 1.45; }
+      max-width: 78%; padding: 10px 14px; border-radius: 14px; background: #f1f5f9; align-self: flex-start;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      &.mine {
+        background: #4f46e5; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px;
+        .msg-sender, .msg-time { color: #c7d2fe; }
+      }
+      .msg-sender { font-size: 0.7rem; font-weight: 700; color: #475569; margin-bottom: 3px; }
+      .msg-text { font-size: 0.9rem; line-height: 1.45; word-break: break-word; }
       .msg-time { font-size: 0.68rem; color: #94a3b8; margin-top: 4px; text-align: right; }
     }
     .chat-input-bar {
       display: flex; gap: 10px; padding-top: 12px; border-top: 1px solid #e2e8f0;
-      input { flex: 1; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; }
+      input { flex: 1; padding: 11px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.92rem; min-width: 0; }
     }
-    @media (max-width: 900px) { .chat-layout { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) {
+      .chat-layout { grid-template-columns: 1fr; height: calc(100vh - 170px); min-height: 420px; }
+      .mobile-back-btn { display: inline-flex; }
+      .chat-layout:not(.mobile-chat-open) .chat-window { display: none; }
+      .chat-layout.mobile-chat-open .conv-list { display: none; }
+      .msg-bubble { max-width: 88%; }
+      .send-label { display: none; }
+    }
   `],
 })
-export class MessagingPageComponent implements OnInit {
+export class MessagingPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
+  readonly realtime = inject(RealtimeService);
 
   readonly conversations = signal<any[]>([]);
   readonly contacts = signal<any[]>([]);
   readonly activeConv = signal<any>(null);
+  readonly mobileShowChat = signal<boolean>(false);
+  readonly typingUser = signal<string>('');
+  readonly sending = signal<boolean>(false);
 
   newRecipientId = '';
   replyText = '';
+  private subs: Subscription[] = [];
+  private typingTimeout: any;
+  private lastTypedSent = 0;
 
   ngOnInit() {
-    this.loadConversations();
+    this.realtime.connect();
+    this.loadConversations(true);
     this.api.get('messages/contacts').subscribe((res) => this.contacts.set(res || []));
+
+    // Subscribe to real-time incoming messages
+    this.subs.push(
+      this.realtime.incomingMessage$.subscribe(({ conversationId, message }) => {
+        const current = this.activeConv();
+        if (current && current.id === conversationId) {
+          const exists = (current.messages || []).some((m: any) => m.id === message.id);
+          if (!exists) {
+            this.activeConv.set({
+              ...current,
+              messages: [...(current.messages || []), message],
+            });
+            this.scrollToBottom();
+          }
+        }
+        this.loadConversations(false);
+      }),
+    );
+
+    // Subscribe to real-time typing events
+    this.subs.push(
+      this.realtime.typingStatus$.subscribe((payload) => {
+        if (this.activeConv()?.id === payload.conversationId && payload.isTyping) {
+          this.typingUser.set(payload.userName);
+          clearTimeout(this.typingTimeout);
+          this.typingTimeout = setTimeout(() => this.typingUser.set(''), 3000);
+        } else if (this.activeConv()?.id === payload.conversationId && !payload.isTyping) {
+          this.typingUser.set('');
+        }
+      }),
+    );
   }
 
-  loadConversations() {
+  ngOnDestroy() {
+    this.subs.forEach((s) => s.unsubscribe());
+    clearTimeout(this.typingTimeout);
+  }
+
+  getOtherParticipantName(conv: any): string {
+    if (!conv?.participants) return conv?.subject || 'Conversation';
+    const other = conv.participants
+      .map((p: any) => p.user)
+      .find((u: any) => u && u.id !== this.auth.currentUser()?.id);
+    return other ? `${other.firstName} ${other.lastName} (${other.role})` : conv.subject;
+  }
+
+  loadConversations(openFirst = false) {
     this.api.get('messages').subscribe((res) => {
       this.conversations.set(res || []);
-      if (res?.length && !this.activeConv()) {
-        this.openConversation(res[0].id);
+      if (openFirst && res?.length && !this.activeConv()) {
+        this.openConversation(res[0].id, false);
       }
     });
   }
 
-  openConversation(id: string) {
-    this.api.get(`messages/${id}`).subscribe((res) => this.activeConv.set(res));
+  openConversation(id: string, switchMobileView = true) {
+    this.api.get(`messages/${id}`).subscribe((res) => {
+      this.activeConv.set(res);
+      if (switchMobileView) {
+        this.mobileShowChat.set(true);
+      }
+      this.scrollToBottom();
+      // Refresh unread badges in sidebar
+      this.api.get('messages').subscribe((list) => this.conversations.set(list || []));
+    });
   }
 
   startNewChat(recipientUserId: string) {
@@ -1416,25 +1534,67 @@ export class MessagingPageComponent implements OnInit {
     this.api
       .post('messages', {
         recipientUserId,
-        content: 'Hello! I would like to discuss academic progress.',
+        content: 'Hello! I would like to connect regarding classes and assessments.',
       })
       .subscribe((msg) => {
         this.newRecipientId = '';
-        this.loadConversations();
-        this.openConversation(msg.conversationId);
+        this.loadConversations(false);
+        this.openConversation(msg.conversationId, true);
       });
   }
 
+  onTypingInput() {
+    const convId = this.activeConv()?.id;
+    if (!convId) return;
+    const now = Date.now();
+    if (now - this.lastTypedSent > 2000) {
+      this.lastTypedSent = now;
+      this.api.post('messages/typing', { conversationId: convId, isTyping: true }).subscribe({ error: () => {} });
+    }
+  }
+
   sendReply() {
-    if (!this.replyText.trim() || !this.activeConv()) return;
+    const text = this.replyText.trim();
+    const current = this.activeConv();
+    if (!text || !current || this.sending()) return;
+
+    this.sending.set(true);
+    this.replyText = '';
+
     this.api
       .post('messages', {
-        conversationId: this.activeConv().id,
-        content: this.replyText,
+        conversationId: current.id,
+        content: text,
       })
-      .subscribe(() => {
-        this.replyText = '';
-        this.openConversation(this.activeConv().id);
+      .subscribe({
+        next: (savedMsg) => {
+          this.sending.set(false);
+          const latest = this.activeConv();
+          if (latest && latest.id === current.id) {
+            const exists = (latest.messages || []).some((m: any) => m.id === savedMsg.id);
+            if (!exists) {
+              this.activeConv.set({
+                ...latest,
+                messages: [...(latest.messages || []), savedMsg],
+              });
+            }
+          }
+          this.scrollToBottom();
+          this.loadConversations(false);
+        },
+        error: () => {
+          this.sending.set(false);
+          this.replyText = text;
+        },
       });
+  }
+
+  private scrollToBottom() {
+    setTimeout(() => {
+      const el = document.getElementById('chatMessagesContainer');
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }, 60);
   }
 }

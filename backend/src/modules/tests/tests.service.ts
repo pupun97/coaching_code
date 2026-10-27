@@ -312,6 +312,26 @@ export class TestsService {
         },
         actor,
       );
+    } else if (test.status === 'PUBLISHED') {
+      // Notify all active students & parents when an open test is published across all batches
+      const allStudents = await this.prisma.student.findMany({
+        include: { parents: { include: { parent: true } } },
+      });
+      const targetUserIds: string[] = [];
+      allStudents.forEach((s) => {
+        targetUserIds.push(s.userId);
+        s.parents?.forEach((ps) => {
+          if (ps.parent?.userId) targetUserIds.push(ps.parent.userId);
+        });
+      });
+      if (targetUserIds.length > 0) {
+        await this.notifications.createBulkNotifications(targetUserIds, {
+          type: 'TEST_ASSIGNED',
+          title: `New Assessment Published: ${test.title}`,
+          message: `A new assessment "${test.title}" (${test.durationMinutes} mins, ${test.totalMarks} marks) has been assigned.`,
+          link: '/student/tests',
+        });
+      }
     }
 
     await this.auditLogs.record({
@@ -411,9 +431,20 @@ export class TestsService {
 
       const enrolled = await this.prisma.classStudent.findMany({
         where: { classBatchId: batchId },
-        include: { student: true },
+        include: {
+          student: {
+            include: {
+              parents: { include: { parent: true } },
+            },
+          },
+        },
       });
-      enrolled.forEach((e) => notifiedUserIds.push(e.student.userId));
+      enrolled.forEach((e) => {
+        notifiedUserIds.push(e.student.userId);
+        e.student.parents?.forEach((ps) => {
+          if (ps.parent?.userId) notifiedUserIds.push(ps.parent.userId);
+        });
+      });
     }
 
     for (const stuId of Array.from(new Set(studentIds))) {
@@ -433,8 +464,16 @@ export class TestsService {
       });
       createdAssignments.push(assignment);
 
-      const stu = await this.prisma.student.findUnique({ where: { id: stuId } });
-      if (stu) notifiedUserIds.push(stu.userId);
+      const stu = await this.prisma.student.findUnique({
+        where: { id: stuId },
+        include: { parents: { include: { parent: true } } },
+      });
+      if (stu) {
+        notifiedUserIds.push(stu.userId);
+        stu.parents?.forEach((ps) => {
+          if (ps.parent?.userId) notifiedUserIds.push(ps.parent.userId);
+        });
+      }
     }
 
     if (notifiedUserIds.length > 0) {

@@ -2,9 +2,11 @@ import { Component, OnInit, OnDestroy, effect, inject, signal } from '@angular/c
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { RealtimeService } from '../../core/services/realtime.service';
 
 // ============================================================================
 // 1. TEACHER DASHBOARD COMPONENT
@@ -257,11 +259,22 @@ export class TeacherDashboardComponent implements OnInit {
     </div>
   `,
 })
-export class StudentDashboardComponent implements OnInit {
+export class StudentDashboardComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly realtime = inject(RealtimeService);
+  private rtSub?: Subscription;
   readonly data = signal<any>(null);
 
   ngOnInit() {
+    this.loadDashboard();
+    this.rtSub = this.realtime.testAssigned$.subscribe(() => this.loadDashboard());
+  }
+
+  ngOnDestroy() {
+    this.rtSub?.unsubscribe();
+  }
+
+  loadDashboard() {
     this.api.get('students/my-dashboard').subscribe((res) => this.data.set(res));
   }
 
@@ -327,11 +340,22 @@ export class StudentDashboardComponent implements OnInit {
     </div>
   `,
 })
-export class StudentTestsListComponent implements OnInit {
+export class StudentTestsListComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly realtime = inject(RealtimeService);
+  private rtSub?: Subscription;
   readonly tests = signal<any[]>([]);
 
   ngOnInit() {
+    this.loadTests();
+    this.rtSub = this.realtime.testAssigned$.subscribe(() => this.loadTests());
+  }
+
+  ngOnDestroy() {
+    this.rtSub?.unsubscribe();
+  }
+
+  loadTests() {
     this.api.get('tests').subscribe((res) => this.tests.set(res.items || []));
   }
 }

@@ -38,4 +38,13 @@ export class MessagingController {
   sendMessage(@Body() dto: any, @CurrentUser() user: AuthenticatedUser) {
     return this.messagingService.sendMessage(dto, user);
   }
+
+  @Post('typing')
+  @ApiOperation({ summary: 'Broadcast real-time typing indicator to conversation participants' })
+  emitTyping(
+    @Body() dto: { conversationId: string; isTyping: boolean },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messagingService.emitTyping(dto.conversationId, Boolean(dto.isTyping), user);
+  }
 }

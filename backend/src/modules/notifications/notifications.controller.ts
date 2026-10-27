@@ -1,13 +1,64 @@
-import { Controller, Get, Patch, Param, Query } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, Sse, MessageEvent, UnauthorizedException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
+import { Observable, interval, merge, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { NotificationsService } from './notifications.service';
+import { RealtimeEventsService } from './realtime-events.service';
 import { CurrentUser, AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Notifications')
 @ApiBearerAuth()
 @Controller('notifications')
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly realtimeEvents: RealtimeEventsService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  @Public()
+  @Sse('stream')
+  @ApiOperation({ summary: 'Real-time Server-Sent Events (SSE) stream for live chat & notifications' })
+  streamEvents(@Query('token') token: string): Observable<MessageEvent> {
+    if (!token) {
+      throw new UnauthorizedException('Missing stream token');
+    }
+
+    let userId: string;
+    try {
+      const decoded = this.jwtService.verify(token, {
+        secret: process.env.JWT_SECRET || 'edunexus-super-secret-jwt-key-2026',
+      });
+      userId = decoded.sub || decoded.id;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired stream token');
+    }
+
+    const initialConnected$ = of({
+      data: {
+        event: 'CONNECTED',
+        data: { userId },
+        timestamp: new Date().toISOString(),
+      },
+    } as MessageEvent);
+
+    const heartbeat$ = interval(25000).pipe(
+      map(
+        () =>
+          ({
+            data: {
+              event: 'HEARTBEAT',
+              timestamp: new Date().toISOString(),
+            },
+          }) as MessageEvent,
+      ),
+    );
+
+    const userEvents$ = this.realtimeEvents.subscribeForUser(userId);
+    return merge(initialConnected$, userEvents$, heartbeat$);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get current user notifications and unread badge count' })

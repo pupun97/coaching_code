@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../providers/email/email.service';
+import { RealtimeEventsService } from './realtime-events.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly realtime: RealtimeEventsService,
   ) {}
 
   async createNotification(data: {
@@ -30,6 +32,12 @@ export class NotificationsService {
       },
     });
 
+    // Push real-time notification event immediately
+    this.realtime.emitToUser(data.userId, 'NEW_NOTIFICATION', notification);
+    if (data.type === 'TEST_ASSIGNED') {
+      this.realtime.emitToUser(data.userId, 'TEST_ASSIGNED', notification);
+    }
+
     if (data.sendEmail && data.userEmail) {
       await this.emailService.sendEmail({
         to: data.userEmail,
@@ -48,7 +56,7 @@ export class NotificationsService {
   ) {
     if (!userIds.length) return { count: 0 };
     const uniqueIds = Array.from(new Set(userIds));
-    return this.prisma.notification.createMany({
+    const result = await this.prisma.notification.createMany({
       data: uniqueIds.map((userId) => ({
         userId,
         type: payload.type,
@@ -57,6 +65,24 @@ export class NotificationsService {
         link: payload.link || null,
       })),
     });
+
+    const eventPayload = {
+      id: `rt-${Date.now()}`,
+      type: payload.type,
+      title: payload.title,
+      message: payload.message,
+      link: payload.link || null,
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Push real-time events to all recipient users
+    this.realtime.emitToUsers(uniqueIds, 'NEW_NOTIFICATION', eventPayload);
+    if (payload.type === 'TEST_ASSIGNED') {
+      this.realtime.emitToUsers(uniqueIds, 'TEST_ASSIGNED', eventPayload);
+    }
+
+    return result;
   }
 
   async getMyNotifications(userId: string, unreadOnly = false) {
